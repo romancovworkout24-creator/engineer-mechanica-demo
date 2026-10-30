@@ -1,0 +1,22 @@
+import * as T from './vendor/three.module.js';
+import {createKnight} from './knight-model.js';
+const host=document.querySelector('#stage');
+try{
+const renderer=new T.WebGLRenderer({antialias:true,alpha:true,powerPreference:'low-power'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));renderer.setClearColor(0x000000,0);renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;host.appendChild(renderer.domElement);renderer.domElement.setAttribute('aria-label','Трёхмерная модель робота. Вращайте прокруткой или перетаскиванием.');
+const scene=new T.Scene(),camera=new T.PerspectiveCamera(34,1,.1,100);camera.position.set(0,0,13);
+// Studio reflections: local procedural light cards, no network environment assets.
+const c=document.createElement('canvas');c.width=1024;c.height=512;const ctx=c.getContext('2d');ctx.fillStyle='#43494e';ctx.fillRect(0,0,1024,512);const g=ctx.createLinearGradient(0,0,0,512);g.addColorStop(0,'#c5c9cc');g.addColorStop(.45,'#777f85');g.addColorStop(1,'#171e23');ctx.fillStyle=g;ctx.fillRect(0,0,1024,512);for(const [x,w] of [[60,90],[320,150],[650,60],[880,100]]){ctx.fillStyle='#f8fafb';ctx.fillRect(x,90,w,320)}const env=new T.CanvasTexture(c);env.mapping=T.EquirectangularReflectionMapping;env.colorSpace=T.SRGBColorSpace;const pm=new T.PMREMGenerator(renderer);scene.environment=pm.fromEquirectangular(env).texture;env.dispose();pm.dispose();
+scene.add(new T.HemisphereLight(0xffffff,0x6b747a,2));for(const [x,y,z,p] of [[-4,6,6,4],[5,2,-3,5],[-4,-4,1,2]]){const l=new T.DirectionalLight(0xffffff,p);l.position.set(x,y,z);scene.add(l)}
+const pose=new T.Group();pose.rotation.z=1.12;scene.add(pose);const knight=createKnight();pose.add(knight);knight.position.y=.14;
+let target=.38,angle=.38,pitch=0,drag=false,lastX=0,offset=0,visible=true,frame=0;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function resize(){const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.position.z=w<600?15:10.5;camera.updateProjectionMatrix()}new ResizeObserver(resize).observe(host);resize();
+function scroll(){const section=document.querySelector('.hero-scroll');const p=T.MathUtils.clamp(-section.getBoundingClientRect().top/(section.offsetHeight-innerHeight),0,1);target=.38+p*Math.PI*2+offset;document.querySelector('#turn-progress').textContent=`${Math.round(p*360)}°`;host.dataset.rotation=target.toFixed(3)}addEventListener('scroll',scroll,{passive:true});scroll();
+const cv=renderer.domElement;cv.style.touchAction='pan-y';cv.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX;cv.setPointerCapture(e.pointerId)});cv.addEventListener('pointermove',e=>{if(drag){offset+=(e.clientX-lastX)*.012;lastX=e.clientX;scroll()}});cv.addEventListener('pointerup',()=>drag=false);cv.addEventListener('pointercancel',()=>drag=false);
+const slider=document.querySelector('#rotation-control');slider.addEventListener('input',()=>{offset=Number(slider.value)*Math.PI/180;scroll()});
+document.querySelector('#reset-model').onclick=()=>{offset=0;slider.value=0;scroll()};
+document.querySelectorAll('[data-view]').forEach((b,i)=>b.addEventListener('click',()=>{offset=[0,Math.PI/2,Math.PI][i]-(target-offset-.38);slider.value=[0,90,180][i];scroll();document.querySelectorAll('[data-view]').forEach((x,j)=>{x.classList.toggle('selected',i===j);x.setAttribute('aria-pressed',String(i===j))})}));
+new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!frame)tick()}).observe(document.querySelector('.hero-scroll'));
+function tick(){frame=0;if(document.hidden||!visible)return;angle=reduced?target:T.MathUtils.lerp(angle,target,.075);knight.rotation.y=angle;knight.rotation.x=.12;pose.position.y=reduced?0:Math.sin(performance.now()*.00065)*.055;renderer.render(scene,camera);frame=requestAnimationFrame(tick)}document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!frame)tick()});
+cv.addEventListener('webglcontextlost',e=>{e.preventDefault();host.classList.remove('ready');document.querySelector('#model-status').textContent='3D недоступно — показан исходный рендер';});cv.addEventListener('webglcontextrestored',()=>location.reload());
+host.classList.add('ready');document.querySelector('#model-status').textContent='3D / ПРОКРУТИТЕ ИЛИ ПОВЕРНИТЕ';if(!frame)tick();
+}catch(e){console.error('3D initialization failed',e);document.querySelector('#model-status').textContent='3D недоступно — показан исходный рендер';}
